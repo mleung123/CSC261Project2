@@ -9,7 +9,7 @@ pub enum NegotiationMessage{
 
 pub trait RL {
     fn send(&mut self, n: NegotiationMessage) -> NegotiationMessage;
-    fn compute_reward(personal_dialog: &Vec<NegotiationMessage>);
+    fn compute_reward(&mut self, personal_dialog: &Vec<NegotiationMessage>);
 }
 
 struct QLearning {
