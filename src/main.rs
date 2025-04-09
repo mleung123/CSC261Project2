@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use rand::prelude::*;
+use rand::distr::OpenClosed01;
+
 
 const NUM_RESOURCE_TYPES: u32 = 2;
 const MAX_RESOURCES: u32 = 4;
@@ -17,6 +20,7 @@ pub trait RL {
 
 struct QLearning {
     q_table: HashMap<(NegotiationMessage, u32), f32>,
+    offer_count: HashMap<NegotiationMessage, u32> // number of times each offer has been sent within an episode
     learning_rate: f32,
     gamma: f32,
     exploration_rate: f32
@@ -24,6 +28,9 @@ struct QLearning {
 
 impl QLearning {
     fn new(learning_rate: f32, gamma: f32, exploration_rate: f32) -> Self {
+        
+        
+        
         let actions = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize + 1;
         let states = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize * MAX_FAILURES as usize;
         let capacity = (actions * states) as usize;
@@ -47,7 +54,55 @@ impl QLearning {
 
 impl RL for QLearning {
     fn send(&mut self, message: NegotiationMessage) -> NegotiationMessage {
-        todo!()
+        let mut rng = rand::rng();
+        
+        // Explore case
+        if exploration_rate<rng.sample(OpenClosed01){
+            let a= rng.sample.sample(OpenClosed01)*MAX_RESOURCES.into();
+            let b= rng.sample.sample(OpenClosed01)*MAX_RESOURCES.into();
+            
+            let mut reply = NegotiationMessage::Offer(vec![ a.into(), b.into() ]);
+            
+
+            //if this isn't the first message, then accept is a valid random action.
+            if matches!(message, NegotiationMessage::Offer(vec![])){
+                let c= rng.sample.sample(OpenClosed01)*(MAX_RESOURCES.pow(2)).into()+1.0;
+                if c>MAX_RESOURCES.pow(2){
+                    reply =NegotiationMessage::Accept;
+                }
+            }
+            else{ //update offer_count
+                if offer_count.contains_key(reply){
+                    self.offer_count.get_mut(reply).inspect(|x| x+=1);
+                }
+                else{
+                    self.offer_count.insert(reply.clone(),1);
+                }
+            }
+            return reply;   
+        }
+        let mut max = 0;
+        let mut max_message = NegotiationMessage::Offer(vec![]);
+        
+        //find highest-valued valid action.
+        for ((message,count),val) in q_table.iter(){
+            if matches!(offer_count.get(message), Some(count)){
+                if max<val {
+                    max = val;
+                    max_message=message;
+                }
+            }
+        }
+        //todo: turn this into a function
+        if offer_count.contains_key(max_message){
+            self.offer_count.get_mut(max_message).inspect(|x| x+=1);
+        }
+        else{
+            self.offer_count.insert(max_message.clone(),1);
+        }
+        return max_message;
+
+        
     }
 
     fn compute_reward(&mut self, personal_dialog: &Vec<NegotiationMessage>) {
@@ -68,7 +123,7 @@ fn episode_driver(mut agent_1: impl RL, mut agent_2: impl RL, ep_num: u32) {
     // Episode
     let mut messages: Vec<NegotiationMessage> = Vec::new();
     // TODO make more reasonable default
-    let mut last_message: NegotiationMessage = NegotiationMessage::Offer(vec![ 0, 0 ]);
+    let mut last_message: NegotiationMessage = NegotiationMessage::Offer(vec![]);
     
     while last_message != NegotiationMessage::Accept {
 
