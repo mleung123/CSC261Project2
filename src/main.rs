@@ -24,7 +24,8 @@ struct QLearning {
     offer_count: HashMap<NegotiationMessage, u32>, // number of times each offer has been sent within an episode
     learning_rate: f32,
     gamma: f32,
-    exploration_rate: f32
+    exploration_rate: f32,
+    reward_table: Vec<Vec<u32>>
 }
 
 impl QLearning {
@@ -37,7 +38,7 @@ impl QLearning {
         let capacity = (actions * states) as usize;
         println!("Capacity: {capacity}, states: {states}, actions: {actions}");
         let mut q_table = HashMap::with_capacity(capacity);
-        
+        let reward_table= vec![vec![0; MAX_RESOURCES as usize]; MAX_RESOURCES as usize];
         for i in 0..MAX_FAILURES {
             // 2 loops, 2 NUM_RESOURCE_TYPES
             for j in 0..(MAX_RESOURCES + 1) {
@@ -49,7 +50,7 @@ impl QLearning {
             q_table.insert((NegotiationMessage::Accept, i), 0.0);
         }
 
-        Self { q_table, offer_count:HashMap::new(), learning_rate, gamma, exploration_rate }
+        Self { q_table, offer_count:HashMap::new(), learning_rate, gamma, exploration_rate, reward_table}
     }
 }
 
@@ -98,6 +99,7 @@ impl RL for QLearning {
             }
         }
         //todo: turn this into a function
+        
         if self.offer_count.contains_key(&max_message){
             let x = self.offer_count.get_mut(&max_message);
                 if let Some(val) = x {
@@ -113,6 +115,8 @@ impl RL for QLearning {
     }
 
     fn compute_reward_and_update_q(&mut self, personal_dialog: &Vec<NegotiationMessage>) {
+        
+        
         todo!()
     }
 }
