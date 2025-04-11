@@ -10,17 +10,18 @@ const MAX_FAILURES: u32 = 5;
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum NegotiationMessage{
     Accept,
-    Offer(Vec<u32>) // Should we use [u32; NUM_RESOURCE_TYPES]?
+    Offer(Vec<u32>), // Should we use [u32; NUM_RESOURCE_TYPES]?
+    Empty
 }
 
 pub trait RL {
     fn send(&mut self, n: NegotiationMessage) -> NegotiationMessage;
-    fn compute_reward(&mut self, personal_dialog: &Vec<NegotiationMessage>);
+    fn compute_reward_and_update_q(&mut self, personal_dialog: &Vec<NegotiationMessage>);
 }
 
 struct QLearning {
     q_table: HashMap<(NegotiationMessage, u32), f32>,
-    offer_count: HashMap<NegotiationMessage, u32> // number of times each offer has been sent within an episode
+    offer_count: HashMap<NegotiationMessage, u32>, // number of times each offer has been sent within an episode
     learning_rate: f32,
     gamma: f32,
     exploration_rate: f32
@@ -48,7 +49,7 @@ impl QLearning {
             q_table.insert((NegotiationMessage::Accept, i), 0.0);
         }
 
-        Self { q_table, learning_rate, gamma, exploration_rate }
+        Self { q_table, offer_count:HashMap::new(), learning_rate, gamma, exploration_rate }
     }
 }
 
@@ -57,23 +58,26 @@ impl RL for QLearning {
         let mut rng = rand::rng();
         
         // Explore case
-        if exploration_rate<rng.sample(OpenClosed01){
-            let a= rng.sample.sample(OpenClosed01)*MAX_RESOURCES.into();
-            let b= rng.sample.sample(OpenClosed01)*MAX_RESOURCES.into();
+        if self.exploration_rate<rng.sample::<f32, OpenClosed01>(OpenClosed01){
+            let a: f64= rng.sample::<f64, OpenClosed01>(OpenClosed01)*MAX_RESOURCES as f64;
+            let b: f64= rng.sample::<f64, OpenClosed01>(OpenClosed01)*MAX_RESOURCES as f64;
             
-            let mut reply = NegotiationMessage::Offer(vec![ a.into(), b.into() ]);
+            let mut reply = NegotiationMessage::Offer(vec![ a.round() as u32, b.round() as u32 ]);
             
 
             //if this isn't the first message, then accept is a valid random action.
-            if matches!(message, NegotiationMessage::Offer(vec![])){
-                let c= rng.sample.sample(OpenClosed01)*(MAX_RESOURCES.pow(2)).into()+1.0;
-                if c>MAX_RESOURCES.pow(2){
+            if matches!(message, NegotiationMessage::Empty){
+                let c: f64= rng.sample::<f64, OpenClosed01>(OpenClosed01)*(MAX_RESOURCES.pow(2)) as f64+1.0;
+                if c>MAX_RESOURCES.pow(2) as f64 {
                     reply =NegotiationMessage::Accept;
                 }
             }
             else{ //update offer_count
-                if offer_count.contains_key(reply){
-                    self.offer_count.get_mut(reply).inspect(|x| x+=1);
+                if self.offer_count.contains_key(&reply){
+                    let x = self.offer_count.get_mut(&reply);
+                    if let Some(val) = x {
+                        *val+=1
+                    }
                 }
                 else{
                     self.offer_count.insert(reply.clone(),1);
@@ -81,21 +85,24 @@ impl RL for QLearning {
             }
             return reply;   
         }
-        let mut max = 0;
+        let mut max = 0.0;
         let mut max_message = NegotiationMessage::Offer(vec![]);
         
         //find highest-valued valid action.
-        for ((message,count),val) in q_table.iter(){
-            if matches!(offer_count.get(message), Some(count)){
-                if max<val {
-                    max = val;
-                    max_message=message;
+        for ((message,count),val) in self.q_table.iter(){
+            if matches!(self.offer_count.get(message), Some(count)){
+                if max<*val {
+                    max = *val;
+                    max_message=message.clone();
                 }
             }
         }
         //todo: turn this into a function
-        if offer_count.contains_key(max_message){
-            self.offer_count.get_mut(max_message).inspect(|x| x+=1);
+        if self.offer_count.contains_key(&max_message){
+            let x = self.offer_count.get_mut(&max_message);
+                if let Some(val) = x {
+                    *val+=1
+                }
         }
         else{
             self.offer_count.insert(max_message.clone(),1);
@@ -105,7 +112,7 @@ impl RL for QLearning {
         
     }
 
-    fn compute_reward(&mut self, personal_dialog: &Vec<NegotiationMessage>) {
+    fn compute_reward_and_update_q(&mut self, personal_dialog: &Vec<NegotiationMessage>) {
         todo!()
     }
 }
