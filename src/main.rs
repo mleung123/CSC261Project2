@@ -7,7 +7,7 @@ const NUM_RESOURCE_TYPES: u32 = 2;
 const MAX_RESOURCES: u32 = 4;
 const MAX_FAILURES: u32 = 5;
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum NegotiationMessage{
     Accept,
     Offer(Vec<u32>), // Should we use [u32; NUM_RESOURCE_TYPES]?
@@ -30,8 +30,6 @@ struct QLearning {
 
 impl QLearning {
     fn new(learning_rate: f32, gamma: f32, exploration_rate: f32) -> Self {
-        
-        
         
         let actions = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize + 1;
         let states = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize * MAX_FAILURES as usize;
@@ -57,13 +55,13 @@ impl QLearning {
 impl RL for QLearning {
     fn send(&mut self, message: NegotiationMessage) -> NegotiationMessage {
         let mut rng = rand::rng();
+        rng.reseed();
         
         // Explore case
         if self.exploration_rate<rng.sample::<f32, OpenClosed01>(OpenClosed01){
-            let a: f64= rng.sample::<f64, OpenClosed01>(OpenClosed01)*MAX_RESOURCES as f64;
-            let b: f64= rng.sample::<f64, OpenClosed01>(OpenClosed01)*MAX_RESOURCES as f64;
             
-            let mut reply = NegotiationMessage::Offer(vec![ a.round() as u32, b.round() as u32 ]);
+            rng.reseed();
+            let mut reply = NegotiationMessage::create_random(&mut rng);
             
 
             //if this isn't the first message, then accept is a valid random action.
@@ -84,10 +82,13 @@ impl RL for QLearning {
                     self.offer_count.insert(reply.clone(),1);
                 }
             }
+            println!("returning reply");
             return reply;   
         }
         let mut max = 0.0;
-        let mut max_message = NegotiationMessage::Offer(vec![]);
+        rng.reseed();
+        let mut max_message = NegotiationMessage::create_random(&mut rng);
+        println!("{max_message:?}");
         
         //find highest-valued valid action.
         for ((message,count),val) in self.q_table.iter(){
@@ -109,6 +110,7 @@ impl RL for QLearning {
         else{
             self.offer_count.insert(max_message.clone(),1);
         }
+        println!("returning max_message");
         return max_message;
 
         
@@ -118,6 +120,12 @@ impl RL for QLearning {
         
         
         todo!()
+    }
+}
+
+impl NegotiationMessage {
+    fn create_random(rand: &mut ThreadRng) -> NegotiationMessage {
+        NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
     }
 }
 
@@ -134,18 +142,23 @@ fn episode_driver(mut agent_1: impl RL, mut agent_2: impl RL, ep_num: u32) {
     // Episode
     let mut messages: Vec<NegotiationMessage> = Vec::new();
     // TODO make more reasonable default
-    let mut last_message: NegotiationMessage = NegotiationMessage::Offer(vec![]);
+    let mut counter_offer: NegotiationMessage = NegotiationMessage::Offer(vec![]);
     
-    while last_message != NegotiationMessage::Accept {
+    let mut num_offers: i32 = 0;
+
+    while counter_offer != NegotiationMessage::Accept && num_offers < 10 {
 
         // Send message to agent 1
-        let offer: NegotiationMessage = agent_1.send(last_message);
+        let offer: NegotiationMessage = agent_1.send(counter_offer);
         messages.push(offer.clone());
+        println!("msg {num_offers}: {offer:?}");
 
         // Check if offer is the end of the negotiation episode
         if offer == NegotiationMessage::Accept { break }
 
-        last_message = agent_2.send(offer);
-        messages.push(last_message.clone());
+        counter_offer = agent_2.send(offer);
+        messages.push(counter_offer.clone());
+        println!("msg {num_offers}: {counter_offer:?}");
+        num_offers+=1;
     }
 }
