@@ -14,6 +14,12 @@ pub enum NegotiationMessage{
     Empty
 }
 
+impl NegotiationMessage {
+    fn create_random(rand: &mut ThreadRng) -> NegotiationMessage {
+        NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
+    }
+}
+
 pub trait RL {
     fn send(&mut self, n: NegotiationMessage) -> NegotiationMessage;
     fn compute_reward_and_update_q(&mut self, personal_dialog: &Vec<NegotiationMessage>);
@@ -50,6 +56,18 @@ impl QLearning {
 
         Self { q_table, offer_count:HashMap::new(), learning_rate, gamma, exploration_rate, reward_table}
     }
+
+    fn increment_offfer_count(&mut self, message: &NegotiationMessage) {
+        if self.offer_count.contains_key(message){
+            let x = self.offer_count.get_mut(message);
+            if let Some(val) = x {
+                *val+=1
+            }
+        }
+        else{
+            self.offer_count.insert(message.clone(), 1);
+        }
+    }
 }
 
 impl RL for QLearning {
@@ -72,15 +90,7 @@ impl RL for QLearning {
                 }
             }
             else{ //update offer_count
-                if self.offer_count.contains_key(&reply){
-                    let x = self.offer_count.get_mut(&reply);
-                    if let Some(val) = x {
-                        *val+=1
-                    }
-                }
-                else{
-                    self.offer_count.insert(reply.clone(),1);
-                }
+                self.increment_offfer_count(&reply);
             }
             println!("returning reply");
             return reply;   
@@ -99,17 +109,8 @@ impl RL for QLearning {
                 }
             }
         }
-        //todo: turn this into a function
         
-        if self.offer_count.contains_key(&max_message){
-            let x = self.offer_count.get_mut(&max_message);
-                if let Some(val) = x {
-                    *val+=1
-                }
-        }
-        else{
-            self.offer_count.insert(max_message.clone(),1);
-        }
+        self.increment_offfer_count(&max_message);
         println!("returning max_message");
         return max_message;
 
@@ -120,12 +121,6 @@ impl RL for QLearning {
         
         
         todo!()
-    }
-}
-
-impl NegotiationMessage {
-    fn create_random(rand: &mut ThreadRng) -> NegotiationMessage {
-        NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
     }
 }
 
