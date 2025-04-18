@@ -22,7 +22,7 @@ impl NegotiationMessage {
 
 pub trait RL {
     fn send(&mut self, n: NegotiationMessage) -> NegotiationMessage;
-    fn compute_reward_and_update_q(&mut self, personal_dialog: &Vec<NegotiationMessage>);
+    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage);
 }
 
 struct QLearning {
@@ -31,7 +31,7 @@ struct QLearning {
     learning_rate: f32,
     gamma: f32,
     exploration_rate: f32,
-    reward_table: Vec<Vec<u32>>
+    reward_table: Vec<i32>
 }
 
 impl QLearning {
@@ -117,9 +117,16 @@ impl RL for QLearning {
         
     }
 
-    fn compute_reward_and_update_q(&mut self, personal_dialog: &Vec<NegotiationMessage>) {
-        
-        
+    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage) {
+        let mut reward: i32 = 0;
+        match final_offer {
+            NegotiationMessage::Empty =>  {}, // max number of messages
+            NegotiationMessage::Accept => eprintln!("final offer was Accept!"), // case never happens
+            NegotiationMessage::Offer(offer) => {
+                offer.iter().enumerate().for_each(|(i, val)| reward+=*val as i32*self.reward_table[i]) 
+            }
+        }
+        reward -= self.offer_count.values().sum::<u32>() as i32 *10;
         todo!()
     }
 }
