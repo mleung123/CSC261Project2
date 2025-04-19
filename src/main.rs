@@ -5,6 +5,7 @@ use rand::distr::OpenClosed01;
 
 const NUM_RESOURCE_TYPES: u32 = 2;
 const MAX_RESOURCES: u32 = 4;
+const MAX_RESOURCES_INC: u32 = MAX_RESOURCES + 1;
 const MAX_FAILURES: u32 = 5;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -25,9 +26,21 @@ pub trait RL {
     fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage);
 }
 
+fn init_q_table_entry() -> HashMap<NegotiationMessage, f32> {
+    let mut map = HashMap::with_capacity(MAX_RESOURCES_INC.pow(NUM_RESOURCE_TYPES) as usize + 1);
+    for i in 0..MAX_RESOURCES_INC {
+        for j in 0..MAX_RESOURCES_INC {
+            map.insert(NegotiationMessage::Offer(vec![ i, j ]), 0.0);
+        }
+    }
+    map.insert(NegotiationMessage::Accept, 0.0);
+    return map;
+}
+
 struct QLearning {
-    q_table: HashMap<(NegotiationMessage, u32), f32>,
+    q_table: HashMap<(NegotiationMessage, u32), HashMap<NegotiationMessage, f32>>,
     offer_count: HashMap<NegotiationMessage, u32>, // number of times each offer has been sent within an episode
+    offer_hist: Vec<u32>, // History of offers sent
     learning_rate: f32,
     gamma: f32,
     exploration_rate: f32,
@@ -37,13 +50,15 @@ struct QLearning {
 impl QLearning {
     fn new(learning_rate: f32, gamma: f32, exploration_rate: f32) -> Self {
         
+        // Calc num states and actions
         let actions = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize + 1;
         let states = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize * MAX_FAILURES as usize;
         let capacity = (actions * states) as usize;
         println!("Capacity: {capacity}, states: {states}, actions: {actions}");
         let mut q_table = HashMap::with_capacity(capacity);
-        let reward_table= vec![vec![0; MAX_RESOURCES as usize]; MAX_RESOURCES as usize];
-        for i in 0..MAX_FAILURES {
+        let reward_table= Vec::with_capacity(MAX_RESOURCES as usize);
+        // Initialize q table
+        /*for i in 0..MAX_FAILURES {
             // 2 loops, 2 NUM_RESOURCE_TYPES
             for j in 0..(MAX_RESOURCES + 1) {
                 for k in 0..(MAX_RESOURCES + 1) {
@@ -52,12 +67,16 @@ impl QLearning {
                 }
             }
             q_table.insert((NegotiationMessage::Accept, i), 0.0);
-        }
+        }*/
 
-        Self { q_table, offer_count:HashMap::new(), learning_rate, gamma, exploration_rate, reward_table}
+        Self {
+            q_table,
+            offer_count: HashMap::new(), offer_hist: Vec::with_capacity(10),
+            learning_rate, gamma, exploration_rate, reward_table
+        }
     }
 
-    fn increment_offfer_count(&mut self, message: &NegotiationMessage) {
+    fn increment_offer_count(&mut self, message: &NegotiationMessage) {
         if self.offer_count.contains_key(message){
             let x = self.offer_count.get_mut(message);
             if let Some(val) = x {
@@ -90,29 +109,31 @@ impl RL for QLearning {
                 }
             }
             else{ //update offer_count
-                self.increment_offfer_count(&reply);
+                self.increment_offer_count(&reply);
             }
             println!("returning reply");
             return reply;   
         }
-        let mut max = 0.0;
-        rng.reseed();
-        let mut max_message = NegotiationMessage::create_random(&mut rng);
-        println!("{max_message:?}");
         
-        //find highest-valued valid action.
-        for ((message,count),val) in self.q_table.iter(){
-            if matches!(self.offer_count.get(message), Some(count)){
-                if max<*val {
-                    max = *val;
-                    max_message=message.clone();
-                }
-            }
+        // get action weights
+        let times_rejected = self.offer_count.get(&message).copied().unwrap_or(0);
+        let action_weights= self.q_table.get(&(message.clone(), times_rejected));
+        if action_weights.is_none() {
+            let value = init_q_table_entry();
+            self.q_table.insert((message, times_rejected), value);
+            return NegotiationMessage::create_random(&mut rng);
         }
+
+        // Filled, there will be max
+        // TODO don't always return last
+        // TODO Pay attention to upper limits of messages sent
+        let (max_message, _) = action_weights.unwrap().iter()
+            .max_by(|(_, w1), (_, w2)| (**w1).partial_cmp(*w2).unwrap())
+            .unwrap();
+
         
-        self.increment_offfer_count(&max_message);
         println!("returning max_message");
-        return max_message;
+        return max_message.clone();
 
         
     }
