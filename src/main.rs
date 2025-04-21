@@ -22,7 +22,7 @@ impl NegotiationMessage {
 }
 
 pub trait RL {
-    fn send(&mut self, n: NegotiationMessage) -> NegotiationMessage;
+    fn send(&mut self, exploration_rate: f32, n: NegotiationMessage) -> NegotiationMessage;
     fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage);
 }
 
@@ -42,13 +42,12 @@ struct QLearning {
     offer_count: HashMap<NegotiationMessage, u32>, // number of times each offer has been sent within an episode
     learning_rate: f32,
     gamma: f32,
-    exploration_rate: f32,
     reward_table: Vec<i32>,
     episode_history: Vec<((NegotiationMessage, u32), NegotiationMessage)>
 }
 
 impl QLearning {
-    fn new(learning_rate: f32, gamma: f32, exploration_rate: f32, reward_table: Vec<i32>) -> Self {
+    fn new(learning_rate: f32, gamma: f32, reward_table: Vec<i32>) -> Self {
 
         // Calc num states and actions
         let actions = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize + 1;
@@ -72,7 +71,7 @@ impl QLearning {
             offer_count: HashMap::new(),
             learning_rate,
             gamma,
-            exploration_rate,
+            
             reward_table,
             episode_history: Vec::with_capacity(20)
         }
@@ -92,11 +91,11 @@ impl QLearning {
 }
 
 impl RL for QLearning {
-    fn send(&mut self, message: NegotiationMessage) -> NegotiationMessage {
+    fn send(&mut self, exploration_rate: f32, message: NegotiationMessage) -> NegotiationMessage {
         let mut rng = rand::rng();
         rng.reseed();
         
-        if self.exploration_rate<rng.sample::<f32, OpenClosed01>(OpenClosed01){
+        if exploration_rate<rng.sample::<f32, OpenClosed01>(OpenClosed01){
             
             rng.reseed();
             let mut reply = NegotiationMessage::create_random(&mut rng);
@@ -158,15 +157,23 @@ impl RL for QLearning {
 fn main() {
     println!("Hello, world!");
 
-    let agent_1 = QLearning::new(0.1, 0.9, 0.95, vec![10, 5]);
-    let agent_2 = QLearning::new(0.1, 0.9, 0.95, vec![5, 10]);
-    episode_driver(agent_1, agent_2, 0);
+    let mut agent_1 = QLearning::new(0.1, 0.9, vec![10, 5]);
+    let mut agent_2 = QLearning::new(0.1, 0.9, vec![5, 10]);
+
+    let explore_rates =[0.95, 0.8,0.5,0.3,0.1];
+    let n_episodes=[3,0,0,0,0];
+    //let n_episodes=[25000,25000,25000,25000,25000];
+    for i in 0..explore_rates.len(){
+        episode_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
+    }
+    
 }
 
-fn episode_driver(mut agent_1: impl RL, mut agent_2: impl RL, ep_num: u32) {
+fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_rate: f32, ep_num: u32) {
 
     println!("\nstarting episode {}", ep_num);
-
+    
+    
     let mut messages: Vec<NegotiationMessage> = Vec::new();
 
     let mut current_message: NegotiationMessage = NegotiationMessage::Empty; 
@@ -176,7 +183,7 @@ fn episode_driver(mut agent_1: impl RL, mut agent_2: impl RL, ep_num: u32) {
 
     while current_message != NegotiationMessage::Accept && num_rounds < max_rounds {
 
-        let agent_1_offer: NegotiationMessage = agent_1.send(current_message);
+        let agent_1_offer: NegotiationMessage = agent_1.send(exploration_rate,current_message);
         messages.push(agent_1_offer.clone());
         println!("Round {}: Agent 1 sends: {:?}", num_rounds, agent_1_offer);
 
@@ -185,7 +192,7 @@ fn episode_driver(mut agent_1: impl RL, mut agent_2: impl RL, ep_num: u32) {
             break; 
         }
 
-        let agent_2_offer: NegotiationMessage = agent_2.send(agent_1_offer);
+        let agent_2_offer: NegotiationMessage = agent_2.send(exploration_rate,agent_1_offer);
         messages.push(agent_2_offer.clone());
         println!("Round {}: Agent 2 sends: {:?}", num_rounds, agent_2_offer);
         
@@ -203,4 +210,13 @@ fn episode_driver(mut agent_1: impl RL, mut agent_2: impl RL, ep_num: u32) {
     agent_1.compute_reward_and_update_q(&final_outcome);
     agent_2.compute_reward_and_update_q(&final_outcome);
     
+}
+
+fn epoch_driver<T: RL>(mut agent_1: &mut T, mut agent_2: &mut T, exploration_rate: f32, n_episodes: u32) {
+    let mut ep_num = 0;
+
+    for _i in 0..n_episodes{
+        episode_driver(agent_1, agent_2,  exploration_rate,ep_num);
+        ep_num+=1;
+    }
 }
