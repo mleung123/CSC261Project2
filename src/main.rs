@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{ hash_map, HashMap };
 use rand::prelude::*;
 use rand::distr::OpenClosed01;
 
@@ -17,6 +17,7 @@ pub enum NegotiationMessage{
 
 impl NegotiationMessage {
     fn create_random(rand: &mut ThreadRng) -> NegotiationMessage {
+        // TODO allow random selection of Accept
         NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
     }
 }
@@ -89,6 +90,31 @@ impl QLearning {
             self.offer_count.insert(message.clone(), 1);
         }
     }
+
+    fn get_max_offer_for_state(&mut self, state: (NegotiationMessage, u32), rand: &mut ThreadRng) -> NegotiationMessage {
+        // Get or init
+        let mut action_weights = self.q_table.entry(state).or_insert_with(init_q_table_entry).iter();
+        // Use first variable as max
+        let mut all_weights_equal = true;
+        let (mut max_action, mut max_weight) = action_weights.next().expect("Weights should have been initialzed");
+
+        // Find the max action
+        for (action, weight) in action_weights {
+            if weight > max_weight {
+                max_action = action;
+                max_weight = weight;
+            } else if weight != max_weight {
+                all_weights_equal = false;
+            }
+        }
+
+        // Return random value if all weights are equal (if we don't do this we will always return the first msg)
+        if all_weights_equal {
+            NegotiationMessage::create_random(rand)
+        } else {
+            max_action.clone()
+        }
+    }
 }
 
 impl RL for QLearning {
@@ -115,11 +141,7 @@ impl RL for QLearning {
         }
         
         let current_state = (message.clone(), self.offer_count.get(&message).copied().unwrap_or(0));
-        let action_weights = self.q_table.entry(current_state.clone()).or_insert_with(init_q_table_entry);
-        let (best_action, _) = action_weights.iter()
-            .max_by(|(_, q1), (_, q2)| q1.partial_cmp(q2).unwrap_or(std::cmp::Ordering::Equal))
-            .expect("action weights should not be empty after initialization");
-        let reply = best_action.clone();
+        let reply = self.get_max_offer_for_state(current_state.clone(), &mut rng);
 
         self.episode_history.push((current_state, reply.clone()));
         self.increment_offer_count(&reply);
@@ -127,6 +149,7 @@ impl RL for QLearning {
         return reply; // Return the chosen action
     }
 
+    // TODO what does sender get?
     fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage) {
         let mut reward: i32 = 0;
         match final_offer {
