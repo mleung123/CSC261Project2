@@ -11,7 +11,7 @@ const MAX_FAILURES: u32 = 5;
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum NegotiationMessage{
     Accept,
-    Offer(Vec<u32>), // Should we use [u32; NUM_RESOURCE_TYPES]?
+    Offer(Vec<u32>),
     Empty
 }
 
@@ -40,24 +40,22 @@ fn init_q_table_entry() -> HashMap<NegotiationMessage, f32> {
 struct QLearning {
     q_table: HashMap<(NegotiationMessage, u32), HashMap<NegotiationMessage, f32>>,
     offer_count: HashMap<NegotiationMessage, u32>, // number of times each offer has been sent within an episode
-    offer_hist: Vec<u32>, // History of offers sent
     learning_rate: f32,
     gamma: f32,
     exploration_rate: f32,
-    reward_table: Vec<i32>
+    reward_table: Vec<i32>,
+    episode_history: Vec<((NegotiationMessage, u32), NegotiationMessage)>
 }
 
 impl QLearning {
-    fn new(learning_rate: f32, gamma: f32, exploration_rate: f32) -> Self {
-        
+    fn new(learning_rate: f32, gamma: f32, exploration_rate: f32, reward_table: Vec<i32>) -> Self {
+
         // Calc num states and actions
         let actions = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize + 1;
         let states = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize * MAX_FAILURES as usize;
         let capacity = (actions * states) as usize;
         println!("Capacity: {capacity}, states: {states}, actions: {actions}");
-        let mut q_table = HashMap::with_capacity(capacity);
-        let reward_table= Vec::with_capacity(MAX_RESOURCES as usize);
-        // Initialize q table
+        let q_table = HashMap::with_capacity(capacity);
         /*for i in 0..MAX_FAILURES {
             // 2 loops, 2 NUM_RESOURCE_TYPES
             for j in 0..(MAX_RESOURCES + 1) {
@@ -71,8 +69,12 @@ impl QLearning {
 
         Self {
             q_table,
-            offer_count: HashMap::new(), offer_hist: Vec::with_capacity(10),
-            learning_rate, gamma, exploration_rate, reward_table
+            offer_count: HashMap::new(),
+            learning_rate,
+            gamma,
+            exploration_rate,
+            reward_table,
+            episode_history: Vec::with_capacity(20)
         }
     }
 
@@ -94,14 +96,11 @@ impl RL for QLearning {
         let mut rng = rand::rng();
         rng.reseed();
         
-        // Explore case
         if self.exploration_rate<rng.sample::<f32, OpenClosed01>(OpenClosed01){
             
             rng.reseed();
             let mut reply = NegotiationMessage::create_random(&mut rng);
             
-
-            //if this isn't the first message, then accept is a valid random action.
             if matches!(message, NegotiationMessage::Empty){
                 let c: f64= rng.sample::<f64, OpenClosed01>(OpenClosed01)*(MAX_RESOURCES.pow(2)) as f64+1.0;
                 if c>MAX_RESOURCES.pow(2) as f64 {
@@ -115,27 +114,17 @@ impl RL for QLearning {
             return reply;   
         }
         
-        // get action weights
-        let times_rejected = self.offer_count.get(&message).copied().unwrap_or(0);
-        let action_weights= self.q_table.get(&(message.clone(), times_rejected));
-        if action_weights.is_none() {
-            let value = init_q_table_entry();
-            self.q_table.insert((message, times_rejected), value);
-            return NegotiationMessage::create_random(&mut rng);
-        }
+        let current_state = (message.clone(), self.offer_count.get(&message).copied().unwrap_or(0));
+        let action_weights = self.q_table.entry(current_state.clone()).or_insert_with(init_q_table_entry);
+        let (best_action, _) = action_weights.iter()
+            .max_by(|(_, q1), (_, q2)| q1.partial_cmp(q2).unwrap_or(std::cmp::Ordering::Equal))
+            .expect("action weights should not be empty after initialization");
+        let reply = best_action.clone();
 
-        // Filled, there will be max
-        // TODO don't always return last
-        // TODO Pay attention to upper limits of messages sent
-        let (max_message, _) = action_weights.unwrap().iter()
-            .max_by(|(_, w1), (_, w2)| (**w1).partial_cmp(*w2).unwrap())
-            .unwrap();
-
+        self.episode_history.push((current_state, reply.clone()));
+        self.increment_offer_count(&reply);
         
-        println!("returning max_message");
-        return max_message.clone();
-
-        
+        return reply; // Return the chosen action
     }
 
     fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage) {
@@ -148,40 +137,70 @@ impl RL for QLearning {
             }
         }
         reward -= self.offer_count.values().sum::<u32>() as i32 *10;
-        todo!()
+
+        // update q-table
+        let reward_f = reward as f32;
+        for (state, action) in &self.episode_history {
+            let action_map = self.q_table.entry(state.clone()).or_insert_with(init_q_table_entry);
+            let current_q = *action_map.get(action).unwrap_or(&0.0); // 0 default
+
+            // NOT FINISHED - need to incorperate the max value
+            todo!();
+            let new_q = current_q + self.learning_rate * (reward_f - current_q);
+
+            action_map.insert(action.clone(), new_q);
+        }
+        
+        self.episode_history.clear(); 
     }
 }
 
 fn main() {
     println!("Hello, world!");
 
-    let agent_1 = QLearning::new(0.1, 0.9, 0.95);
-    let agent_2 = QLearning::new(0.1, 0.9, 0.95);
+    let agent_1 = QLearning::new(0.1, 0.9, 0.95, vec![10, 5]);
+    let agent_2 = QLearning::new(0.1, 0.9, 0.95, vec![5, 10]);
     episode_driver(agent_1, agent_2, 0);
 }
 
 fn episode_driver(mut agent_1: impl RL, mut agent_2: impl RL, ep_num: u32) {
 
-    // Episode
+    println!("\nstarting episode {}", ep_num);
+
     let mut messages: Vec<NegotiationMessage> = Vec::new();
-    // TODO make more reasonable default
-    let mut counter_offer: NegotiationMessage = NegotiationMessage::Offer(vec![]);
+
+    let mut current_message: NegotiationMessage = NegotiationMessage::Empty; 
     
-    let mut num_offers: i32 = 0;
+    let mut num_rounds: i32 = 0;
+    let max_rounds = 10;
 
-    while counter_offer != NegotiationMessage::Accept && num_offers < 10 {
+    while current_message != NegotiationMessage::Accept && num_rounds < max_rounds {
 
-        // Send message to agent 1
-        let offer: NegotiationMessage = agent_1.send(counter_offer);
-        messages.push(offer.clone());
-        println!("msg {num_offers}: {offer:?}");
+        let agent_1_offer: NegotiationMessage = agent_1.send(current_message);
+        messages.push(agent_1_offer.clone());
+        println!("Round {}: Agent 1 sends: {:?}", num_rounds, agent_1_offer);
 
-        // Check if offer is the end of the negotiation episode
-        if offer == NegotiationMessage::Accept { break }
+        if agent_1_offer == NegotiationMessage::Accept { 
+            current_message = agent_1_offer;
+            break; 
+        }
 
-        counter_offer = agent_2.send(offer);
-        messages.push(counter_offer.clone());
-        println!("msg {num_offers}: {counter_offer:?}");
-        num_offers+=1;
+        let agent_2_offer: NegotiationMessage = agent_2.send(agent_1_offer);
+        messages.push(agent_2_offer.clone());
+        println!("Round {}: Agent 2 sends: {:?}", num_rounds, agent_2_offer);
+        
+        current_message = agent_2_offer;
+        
+        if current_message == NegotiationMessage::Accept { break; }
+
+        num_rounds += 1;
     }
+
+    let final_outcome = messages.last().cloned().unwrap_or(NegotiationMessage::Empty);
+    println!("outcome: {:?}", final_outcome);
+    println!("rounds: {}", num_rounds);
+
+    agent_1.compute_reward_and_update_q(&final_outcome);
+    agent_2.compute_reward_and_update_q(&final_outcome);
+    
 }
