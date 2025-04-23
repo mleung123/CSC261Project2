@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use rand::prelude::*;
 use rand::distr::OpenClosed01;
 
-
+const MAX_EXCHANGE_PAIRS u32=20; // i.e. each agent makes MAX_EXCHANGE_PAIRS offers.
 const NUM_RESOURCE_TYPES: u32 = 2;
 const MAX_RESOURCES: u32 = 4;
 const MAX_RESOURCES_INC: u32 = MAX_RESOURCES + 1;
@@ -73,7 +73,7 @@ impl QLearning {
             gamma,
             
             reward_table,
-            episode_history: Vec::with_capacity(20)
+            episode_history: Vec::with_capacity(MAX_EXCHANGE_PAIRS*2)
         }
     }
 
@@ -162,7 +162,7 @@ impl RL for QLearning {
             }
         }
         reward -= self.offer_count.values().sum::<u32>() as i32 *10;
-
+        
         // update q-table
         let reward_f = reward as f32;
         for (state, action) in &self.episode_history {
@@ -187,7 +187,7 @@ fn main() {
     let mut agent_2 = QLearning::new(0.1, 0.9, vec![5, 10]);
 
     let explore_rates =[0.95, 0.8,0.5,0.3,0.1];
-    let n_episodes=[3,0,0,0,0];
+    let n_episodes=[10,0,0,0,0];
     //let n_episodes=[25000,25000,25000,25000,25000];
     for i in 0..explore_rates.len(){
         episode_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
@@ -205,9 +205,9 @@ fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_
     let mut current_message: NegotiationMessage = NegotiationMessage::Empty; 
     
     let mut num_rounds: i32 = 0;
-    let max_rounds = 10;
+    
 
-    while current_message != NegotiationMessage::Accept && num_rounds < max_rounds {
+    while current_message != NegotiationMessage::Accept && num_rounds < MAX_EXCHANGE_PAIRS {
 
         let agent_1_offer: NegotiationMessage = agent_1.send(exploration_rate,current_message);
         messages.push(agent_1_offer.clone());
