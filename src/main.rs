@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use rand::prelude::*;
 use rand::distr::OpenClosed01;
 
-const MAX_EXCHANGE_PAIRS u32=20; // i.e. each agent makes MAX_EXCHANGE_PAIRS offers.
+const MAX_EXCHANGE_PAIRS: i32=20; // i.e. each agent makes MAX_EXCHANGE_PAIRS offers.
 const NUM_RESOURCE_TYPES: u32 = 2;
 const MAX_RESOURCES: u32 = 4;
 const MAX_RESOURCES_INC: u32 = MAX_RESOURCES + 1;
@@ -42,6 +42,7 @@ struct QLearning {
     offer_count: HashMap<NegotiationMessage, u32>, // number of times each offer has been sent within an episode
     learning_rate: f32,
     gamma: f32,
+    rng: ThreadRng,
     reward_table: Vec<i32>,
     episode_history: Vec<((NegotiationMessage, u32), NegotiationMessage)>
 }
@@ -71,9 +72,9 @@ impl QLearning {
             offer_count: HashMap::new(),
             learning_rate,
             gamma,
-            
+            rng: rand::rng(),
             reward_table,
-            episode_history: Vec::with_capacity(MAX_EXCHANGE_PAIRS*2)
+            episode_history: Vec::with_capacity(MAX_EXCHANGE_PAIRS as usize*2)
         }
     }
 
@@ -89,7 +90,7 @@ impl QLearning {
         }
     }
 
-    fn get_max_offer_for_state(&mut self, state: (NegotiationMessage, u32), rand: &mut ThreadRng) -> NegotiationMessage {
+    fn get_max_offer_for_state(&mut self, state: (NegotiationMessage, u32)) -> (NegotiationMessage, f32) {
         // Get or init
         let mut action_weights = self.q_table.entry(state).or_insert_with(init_q_table_entry).iter();
         // Use first variable as max
@@ -108,14 +109,11 @@ impl QLearning {
 
         // Return random value if all weights are equal (if we don't do this we will always return the first msg)
         if all_weights_equal {
-            NegotiationMessage::create_random(rand)
+            (NegotiationMessage::create_random(&mut self.rng), *max_weight)
         } else {
-            max_action.clone()
+            (max_action.clone(), *max_weight)
         }
     }
-
-
-
 }
 
 
@@ -144,13 +142,14 @@ impl RL for QLearning {
         }
         
         let current_state = (message.clone(), self.offer_count.get(&message).copied().unwrap_or(0));
-        let reply = self.get_max_offer_for_state(current_state.clone(), &mut rng);
+        let (reply, _) = self.get_max_offer_for_state(current_state.clone());
 
         self.episode_history.push((current_state, reply.clone()));
         self.increment_offer_count(&reply);
         
         return reply; // Return the chosen action
     }
+
     // TODO what does sender get?
     fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage) {
         let mut reward: i32 = 0;
@@ -162,16 +161,16 @@ impl RL for QLearning {
             }
         }
         reward -= self.offer_count.values().sum::<u32>() as i32 *10;
-        
+
         // update q-table
         let reward_f = reward as f32;
-        for (state, action) in &self.episode_history {
-            let action_map = self.q_table.entry(state.clone()).or_insert_with(init_q_table_entry);
-            let current_q = *action_map.get(action).unwrap_or(&0.0); // 0 default
+        for (state, action) in self.episode_history.clone() {
+            let (_, max_weight) = self.get_max_offer_for_state(state.clone());
+            let action_map = self.q_table.entry(state).or_insert_with(init_q_table_entry);
+            let current_q = *action_map.get(&action).unwrap_or(&0.0); // 0 default
 
             // NOT FINISHED - need to incorperate the max value
-            todo!();
-            let new_q = current_q + self.learning_rate * (reward_f - current_q);
+            let new_q = current_q + self.learning_rate * (reward_f + self.gamma * max_weight);
 
             action_map.insert(action.clone(), new_q);
         }
