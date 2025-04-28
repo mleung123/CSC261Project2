@@ -25,6 +25,15 @@ impl NegotiationMessage {
         }
         NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
     }
+
+    fn invert(&self) -> NegotiationMessage {
+        if let NegotiationMessage::Offer(vec) = self {
+            let response = vec![ MAX_RESOURCES - vec[0], MAX_RESOURCES - vec[1] ];
+            return NegotiationMessage::Offer(response);
+        } else {
+            return self.clone()
+        }
+    }
 }
 
 pub trait RL {
@@ -214,12 +223,25 @@ fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_
         num_rounds += 1;
     }
 
-    let final_outcome = messages.last().cloned().unwrap_or(NegotiationMessage::Empty);
+    let mut final_outcome = messages.last().cloned().unwrap_or(NegotiationMessage::Empty);
+    if final_outcome == NegotiationMessage::Accept {
+        if messages.len() > 1 {
+            final_outcome = messages[messages.len() - 2].clone()
+        } else {
+            final_outcome = NegotiationMessage::Empty
+        }
+    }
+
     println!("outcome: {:?}", final_outcome);
     println!("rounds: {}", num_rounds);
 
-    agent_1.compute_reward_and_update_q(&final_outcome);
-    agent_2.compute_reward_and_update_q(&final_outcome);
+    if messages.len() % 2 == 0 { // agent 2 had las offer
+        agent_1.compute_reward_and_update_q(&final_outcome.invert());
+        agent_2.compute_reward_and_update_q(&final_outcome);
+    } else {
+        agent_1.compute_reward_and_update_q(&final_outcome);
+        agent_2.compute_reward_and_update_q(&final_outcome.invert());
+    }
     
 }
 
