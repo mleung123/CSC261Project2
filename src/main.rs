@@ -8,6 +8,8 @@ const MAX_RESOURCES: u32 = 4;
 const MAX_RESOURCES_INC: u32 = MAX_RESOURCES + 1;
 const MAX_FAILURES: u32 = 5;
 
+const PRINTING: bool = false;
+
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum NegotiationMessage{
     Accept,
@@ -186,10 +188,10 @@ fn main() {
     let mut agent_2 = QLearning::new(0.1, 0.9, vec![5, 10]);
 
     let explore_rates =[0.95, 0.8,0.5,0.3,0.1];
-    let n_episodes=[10,0,0,0,0];
-    //let n_episodes=[25000,25000,25000,25000,25000];
+    //let n_episodes=[100,100,100,100,100];
+    let n_episodes=[25000,25000,25000,25000,25000];
     for i in 0..explore_rates.len(){
-        episode_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
+        epoch_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
     }
     
 }
