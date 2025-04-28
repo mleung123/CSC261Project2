@@ -3,7 +3,7 @@ use rand::prelude::*;
 use rand::distr::OpenClosed01;
 
 const MAX_EXCHANGE_PAIRS: i32=20; // i.e. each agent makes MAX_EXCHANGE_PAIRS offers.
-const NUM_RESOURCE_TYPES: u32 = 2;
+const NUM_RESOURCE_TYPES: u32 = 4;
 const MAX_RESOURCES: u32 = 2;
 const MAX_RESOURCES_INC: u32 = MAX_RESOURCES + 1;
 const MAX_FAILURES: u32 = 5;
@@ -159,16 +159,26 @@ impl RL for QLearning {
             }
         }
 
-        // update q-table
         let reward_f = reward as f32;
         println!("An agent was rewarded by {reward}");
-        for (state, action) in self.episode_history.clone() {
-            let (_, max_weight) = self.get_max_offer_for_state(state.clone());
+
+        // update q-table
+        let history_len = self.episode_history.len();
+        for i in 0..history_len {
+            let (state, action) = self.episode_history[i].clone();
+
+            let next_q_max = if i == history_len-1 {
+                0.0
+            } else {
+                let (next_state, _) = &self.episode_history[i+1];
+                let (_, max_q_for_next_state) = self.get_max_offer_for_state(next_state.clone());
+                max_q_for_next_state
+            };
             let action_map = self.q_table.entry(state).or_insert_with(init_q_table_entry);
             let current_q = *action_map.get(&action).unwrap_or(&0.0); // 0 default
-
-            let new_q = current_q + self.learning_rate * (reward_f + self.gamma * max_weight);
-
+            let target = reward_f + self.gamma * next_q_max;
+            let new_q = current_q + self.learning_rate * (target - current_q);
+            // update q-table
             action_map.insert(action.clone(), new_q);
         }
         
