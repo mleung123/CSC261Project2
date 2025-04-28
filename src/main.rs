@@ -4,7 +4,7 @@ use rand::distr::OpenClosed01;
 
 const MAX_EXCHANGE_PAIRS: i32=20; // i.e. each agent makes MAX_EXCHANGE_PAIRS offers.
 const NUM_RESOURCE_TYPES: u32 = 2;
-const MAX_RESOURCES: u32 = 4;
+const MAX_RESOURCES: u32 = 2;
 const MAX_RESOURCES_INC: u32 = MAX_RESOURCES + 1;
 const MAX_FAILURES: u32 = 5;
 
@@ -150,13 +150,13 @@ impl RL for QLearning {
     fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage) {
         let mut reward: i32 = 0;
         match final_offer {
-            NegotiationMessage::Empty =>  {}, // max number of messages
+            NegotiationMessage::Empty =>  reward = -400, // max number of messages
             NegotiationMessage::Accept => eprintln!("final offer was Accept!"), // case never happens
             NegotiationMessage::Offer(offer) => {
-                offer.iter().enumerate().for_each(|(i, val)| reward+=*val as i32*self.reward_table[i]) 
+                offer.iter().enumerate().for_each(|(i, val)| reward+=*val as i32*self.reward_table[i]);
+                reward -= self.offer_count.values().sum::<u32>() as i32 *10;
             }
         }
-        reward -= self.offer_count.values().sum::<u32>() as i32 *10;
 
         // update q-table
         let reward_f = reward as f32;
@@ -184,7 +184,7 @@ fn main() {
 
     let explore_rates =[0.95, 0.8,0.5,0.3,0.1];
     //let n_episodes=[100,100,100,100,100];
-    let n_episodes=[2500,2500,2500,2500,2500];
+    let n_episodes=[25000,25000,25000,25000,25000];
     for i in 0..explore_rates.len(){
         epoch_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
     }
