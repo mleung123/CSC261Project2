@@ -247,3 +247,35 @@ fn epoch_driver<T: RL>(mut agent_1: &mut T, mut agent_2: &mut T, exploration_rat
         ep_num+=1;
     }
 }
+
+
+
+
+//PHC notes:
+
+//phc essentially comes down to replacing the greedy policy with a new mixed policy, and updating the mixed policy at each step.
+
+
+// to implement this, we'll need to have a policy table keeping track of the likelihood of choosing any given state-action pair.
+// we could either make a separate table for this, or make it so the q-table has a tuple containing the q-value and this probability.
+
+
+// mixed policy:
+// pick a random possible action, using the probabilities in the policy table.
+
+//updating policy:
+
+//for every single sa-pair:
+
+    //  we increase the likelihood of choosing 
+    //  the highest valued action by the combined delta_a of every single other sa-pair.
+    //  and decrease the likelihood of choosing
+
+// where delta_a is the minimum of the current likelihood of choosing the action, 
+// or delta(some constant) divided by number of other possible actions.
+
+//note: I have no idea how we're supposed to ensure that the probabilities sum to one at any given state
+// we could just completely brush this under the rug...
+
+// not sure if it makes sense to create a new struct for this, since it's very similar to q-learning. 
+// At the same time, it does need a policy table, so it just cant't be a trait.. 
