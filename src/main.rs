@@ -19,8 +19,9 @@ pub enum NegotiationMessage{
 
 impl NegotiationMessage {
     fn create_random(rand: &mut ThreadRng) -> NegotiationMessage {
-        let c: f64= rand.sample::<f64, OpenClosed01>(OpenClosed01)*(MAX_RESOURCES.pow(2)) as f64+1.0;
-        if c>MAX_RESOURCES.pow(2) as f64 {
+        let accept_chance = (MAX_RESOURCES_INC.pow(NUM_RESOURCE_TYPES)) as f64+1.0;
+        let c: f64= rand.sample::<f64, OpenClosed01>(OpenClosed01)*accept_chance;
+        if c>=accept_chance as f64 {
             return NegotiationMessage::Accept;
         }
         NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
