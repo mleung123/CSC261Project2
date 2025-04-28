@@ -133,7 +133,7 @@ impl RL for QLearning {
             rng.reseed();
             let mut reply = NegotiationMessage::create_random(&mut rng);
             self.increment_offer_count(&reply);
-            println!("returning reply");
+            // println!("returning reply");
             return reply;   
         }
         
@@ -160,6 +160,7 @@ impl RL for QLearning {
 
         // update q-table
         let reward_f = reward as f32;
+        println!("An agent was rewarded by {reward}");
         for (state, action) in self.episode_history.clone() {
             let (_, max_weight) = self.get_max_offer_for_state(state.clone());
             let action_map = self.q_table.entry(state).or_insert_with(init_q_table_entry);
@@ -171,6 +172,7 @@ impl RL for QLearning {
         }
         
         self.episode_history.clear(); 
+        self.offer_count.clear();
     }
 }
 
@@ -205,7 +207,7 @@ fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_
 
         let agent_1_offer: NegotiationMessage = agent_1.send(exploration_rate,current_message);
         messages.push(agent_1_offer.clone());
-        println!("Round {}: Agent 1 sends: {:?}", num_rounds, agent_1_offer);
+        // println!("Round {}: Agent 1 sends: {:?}", num_rounds, agent_1_offer);
 
         if agent_1_offer == NegotiationMessage::Accept { 
             current_message = agent_1_offer;
@@ -214,7 +216,7 @@ fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_
 
         let agent_2_offer: NegotiationMessage = agent_2.send(exploration_rate,agent_1_offer);
         messages.push(agent_2_offer.clone());
-        println!("Round {}: Agent 2 sends: {:?}", num_rounds, agent_2_offer);
+        // println!("Round {}: Agent 2 sends: {:?}", num_rounds, agent_2_offer);
         
         current_message = agent_2_offer;
         
