@@ -19,6 +19,10 @@ pub enum NegotiationMessage{
 
 impl NegotiationMessage {
     fn create_random(rand: &mut ThreadRng) -> NegotiationMessage {
+        let c: f64= rand.sample::<f64, OpenClosed01>(OpenClosed01)*(MAX_RESOURCES.pow(2)) as f64+1.0;
+        if c>MAX_RESOURCES.pow(2) as f64 {
+            return NegotiationMessage::Accept;
+        }
         NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
     }
 }
@@ -58,16 +62,6 @@ impl QLearning {
         let capacity = (actions * states) as usize;
         println!("Capacity: {capacity}, states: {states}, actions: {actions}");
         let q_table = HashMap::with_capacity(capacity);
-        /*for i in 0..MAX_FAILURES {
-            // 2 loops, 2 NUM_RESOURCE_TYPES
-            for j in 0..(MAX_RESOURCES + 1) {
-                for k in 0..(MAX_RESOURCES + 1) {
-                    let message = NegotiationMessage::Offer(vec![ j, k ]);
-                    q_table.insert((message, i), 0.0);
-                }
-            }
-            q_table.insert((NegotiationMessage::Accept, i), 0.0);
-        }*/
 
         Self {
             q_table,
@@ -129,16 +123,7 @@ impl RL for QLearning {
             
             rng.reseed();
             let mut reply = NegotiationMessage::create_random(&mut rng);
-            
-            if matches!(message, NegotiationMessage::Empty){
-                let c: f64= rng.sample::<f64, OpenClosed01>(OpenClosed01)*(MAX_RESOURCES.pow(2)) as f64+1.0;
-                if c>MAX_RESOURCES.pow(2) as f64 {
-                    reply =NegotiationMessage::Accept;
-                }
-            }
-            else{ //update offer_count
-                self.increment_offer_count(&reply);
-            }
+            self.increment_offer_count(&reply);
             println!("returning reply");
             return reply;   
         }
@@ -171,7 +156,6 @@ impl RL for QLearning {
             let action_map = self.q_table.entry(state).or_insert_with(init_q_table_entry);
             let current_q = *action_map.get(&action).unwrap_or(&0.0); // 0 default
 
-            // NOT FINISHED - need to incorperate the max value
             let new_q = current_q + self.learning_rate * (reward_f + self.gamma * max_weight);
 
             action_map.insert(action.clone(), new_q);
@@ -189,7 +173,7 @@ fn main() {
 
     let explore_rates =[0.95, 0.8,0.5,0.3,0.1];
     //let n_episodes=[100,100,100,100,100];
-    let n_episodes=[25000,25000,25000,25000,25000];
+    let n_episodes=[2500,2500,2500,2500,2500];
     for i in 0..explore_rates.len(){
         epoch_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
     }
