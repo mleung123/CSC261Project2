@@ -39,7 +39,7 @@ impl NegotiationMessage {
 
 pub trait RL {
     fn send(&mut self, exploration_rate: f32, n: NegotiationMessage) -> NegotiationMessage;
-    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage);
+    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage, is_accept: bool);
 }
 
 fn init_q_table_entry() -> HashMap<NegotiationMessage, f32> {
@@ -130,16 +130,19 @@ impl RL for QLearning {
         let mut rng = rand::rng();
         rng.reseed();
         
+        let current_state = (message.clone(), self.offer_count.get(&message).copied().unwrap_or(0));
+
         if exploration_rate<rng.sample::<f32, OpenClosed01>(OpenClosed01){
             
             rng.reseed();
             let mut reply = NegotiationMessage::create_random(&mut rng);
             self.increment_offer_count(&reply);
             // println!("returning reply");
+            self.episode_history.push((current_state, reply.clone()));
             return reply;   
         }
         
-        let current_state = (message.clone(), self.offer_count.get(&message).copied().unwrap_or(0));
+        
         let (reply, _) = self.get_max_offer_for_state(current_state.clone());
 
         self.episode_history.push((current_state, reply.clone()));
@@ -149,14 +152,14 @@ impl RL for QLearning {
     }
 
     // TODO what does sender get?
-    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage) {
+    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage, is_accept: bool) {
         let mut reward: i32 = 0;
         match final_offer {
             NegotiationMessage::Empty =>  reward = -400, // max number of messages
             NegotiationMessage::Accept => eprintln!("final offer was Accept!"), // case never happens
             NegotiationMessage::Offer(offer) => {
-                offer.iter().enumerate().for_each(|(i, val)| reward+=*val as i32*self.reward_table[i]);
-                reward -= self.episode_history.len() as i32 *10;
+                offer.iter().enumerate().for_each(|(i, val)| reward+= (*val) as i32*self.reward_table[i]);
+                reward -= self.episode_history.len() as i32 *20;
             }
         }
 
@@ -166,7 +169,10 @@ impl RL for QLearning {
         // update q-table
         let history_len = self.episode_history.len();
         for i in 0..history_len {
-            let (state, action) = self.episode_history[i].clone();
+            let (state, mut action) = self.episode_history[i].clone();
+            if is_accept && i == history_len-1 {
+                action = NegotiationMessage::Accept;
+            }
 
             let next_q_max = if i == history_len-1 {
                 0.0
@@ -177,8 +183,8 @@ impl RL for QLearning {
             };
             let action_map = self.q_table.entry(state).or_insert_with(init_q_table_entry);
             let current_q = *action_map.get(&action).unwrap_or(&0.0); // 0 default
-            let target = reward_f + self.gamma * next_q_max;
-            let new_q = current_q + self.learning_rate * (target - current_q);
+            let target = (reward_f + (self.gamma * next_q_max));
+            let new_q = current_q + (self.learning_rate * (target - current_q));
             // update q-table
             action_map.insert(action.clone(), new_q);
         }
@@ -194,9 +200,9 @@ fn main() {
     let mut agent_1 = QLearning::new(0.1, 0.9, vec![300, 150]);
     let mut agent_2 = QLearning::new(0.1, 0.9, vec![150, 300]);
 
-    let explore_rates =[0.95, 0.8,0.5,0.3,0.1];
+    let explore_rates =[0.95, 0.8,0.5,0.3,0.1,0.0];
     //let n_episodes=[100,100,100,100,100];
-    let n_episodes=[25000,25000,25000,25000,25000];
+    let n_episodes=[25000,25000,25000,25000,25000,3];
     for i in 0..explore_rates.len(){
         epoch_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
     }
@@ -250,11 +256,11 @@ fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_
     println!("rounds: {}", num_rounds);
 
     if messages.len() % 2 == 0 { // agent 2 had las offer
-        agent_1.compute_reward_and_update_q(&final_outcome.invert());
-        agent_2.compute_reward_and_update_q(&final_outcome);
+        agent_1.compute_reward_and_update_q(&final_outcome.invert(), true);
+        agent_2.compute_reward_and_update_q(&final_outcome, false);
     } else {
-        agent_1.compute_reward_and_update_q(&final_outcome);
-        agent_2.compute_reward_and_update_q(&final_outcome.invert());
+        agent_1.compute_reward_and_update_q(&final_outcome, false);
+        agent_2.compute_reward_and_update_q(&final_outcome.invert(), true);
     }
     
 }
