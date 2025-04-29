@@ -100,24 +100,25 @@ impl QLearning {
         // Get or init
         let mut action_weights = self.q_table.entry(state).or_insert_with(init_q_table_entry).iter();
         // Use first variable as max
-        let mut all_weights_equal = true;
         let (mut max_action, mut max_weight) = action_weights.next().expect("Weights should have been initialzed");
+        let mut max_actions = vec![ max_action ];
 
         // Find the max action
         for (action, weight) in action_weights {
             if weight > max_weight {
                 max_action = action;
                 max_weight = weight;
-            } else if weight != max_weight {
-                all_weights_equal = false;
+                max_actions = vec![ max_action ];
+            } else if weight == max_weight {
+                max_actions.push(action);
             }
         }
 
-        // Return random value if all weights are equal (if we don't do this we will always return the first msg)
-        if all_weights_equal {
-            (NegotiationMessage::create_random(&mut self.rng), *max_weight)
+        if max_actions.len() == 1 {
+            (max_actions[0].clone(), *max_weight)
         } else {
-            (max_action.clone(), *max_weight)
+            let index = self.rng.random_range(0..max_actions.len());
+            (max_actions[index].clone(), *max_weight)
         }
     }
 }
