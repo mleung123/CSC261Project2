@@ -156,7 +156,7 @@ impl RL for QLearning {
             NegotiationMessage::Accept => eprintln!("final offer was Accept!"), // case never happens
             NegotiationMessage::Offer(offer) => {
                 offer.iter().enumerate().for_each(|(i, val)| reward+=*val as i32*self.reward_table[i]);
-                reward -= self.offer_count.values().sum::<u32>() as i32 *10;
+                reward -= self.episode_history.len() as i32 *10;
             }
         }
 
@@ -191,8 +191,8 @@ impl RL for QLearning {
 fn main() {
     println!("Hello, world!");
 
-    let mut agent_1 = QLearning::new(0.1, 0.9, vec![10, 5]);
-    let mut agent_2 = QLearning::new(0.1, 0.9, vec![5, 10]);
+    let mut agent_1 = QLearning::new(0.1, 0.9, vec![300, 150]);
+    let mut agent_2 = QLearning::new(0.1, 0.9, vec![150, 300]);
 
     let explore_rates =[0.95, 0.8,0.5,0.3,0.1];
     //let n_episodes=[100,100,100,100,100];
