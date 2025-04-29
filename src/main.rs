@@ -19,9 +19,8 @@ pub enum NegotiationMessage{
 
 impl NegotiationMessage {
     fn create_random(rand: &mut ThreadRng) -> NegotiationMessage {
-        let accept_chance = (MAX_RESOURCES_INC.pow(NUM_RESOURCE_TYPES)) as f64+1.0;
-        let c: f64= rand.sample::<f64, OpenClosed01>(OpenClosed01)*accept_chance;
-        if c>=accept_chance as f64 {
+        let accept = rand.random_range(0..NUM_RESOURCE_TYPES.pow(MAX_RESOURCES) + 1);
+        if accept == NUM_RESOURCE_TYPES.pow(MAX_RESOURCES) {
             return NegotiationMessage::Accept;
         }
         NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
@@ -151,7 +150,6 @@ impl RL for QLearning {
         return reply; // Return the chosen action
     }
 
-    // TODO what does sender get?
     fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage, is_accept: bool) {
         let mut reward: i32 = 0;
         match final_offer {
@@ -159,7 +157,6 @@ impl RL for QLearning {
             NegotiationMessage::Accept => eprintln!("final offer was Accept!"), // case never happens
             NegotiationMessage::Offer(offer) => {
                 offer.iter().enumerate().for_each(|(i, val)| reward+= (*val) as i32*self.reward_table[i]);
-                reward -= self.episode_history.len() as i32 *20;
             }
         }
 
@@ -187,6 +184,7 @@ impl RL for QLearning {
             let new_q = current_q + (self.learning_rate * (target - current_q));
             // update q-table
             action_map.insert(action.clone(), new_q);
+            reward -= 10;
         }
         
         self.episode_history.clear(); 
