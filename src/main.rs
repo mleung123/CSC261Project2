@@ -141,9 +141,9 @@ impl RL for QLearning {
         rng.reseed();
         
         let current_state = (message.clone(), self.offer_count.get(&message).copied().unwrap_or(0));
+        let explore_val = rng.sample::<f32, OpenClosed01>(OpenClosed01);
 
-        if exploration_rate<rng.sample::<f32, OpenClosed01>(OpenClosed01){
-            
+        if exploration_rate>=explore_val{
             rng.reseed();
             let mut reply = NegotiationMessage::create_random(&mut rng, message != NegotiationMessage::Empty);
             self.increment_offer_count(&reply);
@@ -168,6 +168,7 @@ impl RL for QLearning {
             NegotiationMessage::Accept => eprintln!("final offer was Accept!"), // case never happens
             NegotiationMessage::Offer(offer) => {
                 offer.iter().enumerate().for_each(|(i, val)| reward+= (*val) as i32*self.reward_table[i]);
+                reward -= self.offer_count.len() as i32 * 10;
             }
         }
         let mut reward_f = reward as f32;
@@ -177,24 +178,25 @@ impl RL for QLearning {
         let history_len = self.episode_history.len();
         for i in 0..history_len {
             let (state, mut action) = self.episode_history[i].clone();
-            if is_accept && i == history_len-1 {
-                action = NegotiationMessage::Accept;
-            }
+            // if is_accept && i == history_len-1 {
+            //     action = NegotiationMessage::Accept;
+            // }
 
-            let next_q_max = if i == history_len-1 {
-                0.0
-            } else {
-                let (next_state, _) = &self.episode_history[i+1];
-                let (_, max_q_for_next_state) = self.get_max_offer_for_state(next_state.clone());
-                max_q_for_next_state
-            };
+            // let next_q_max = if i == history_len-1 {
+            //     0.0
+            // } else {
+            //     let (next_state, _) = &self.episode_history[i+1];
+            //     let (_, max_q_for_next_state) = self.get_max_offer_for_state(next_state.clone());
+            //     max_q_for_next_state
+            // };
+            let (_, next_q_max) = self.get_max_offer_for_state(state.clone());
             let action_map = self.q_table.entry(state).or_insert_with(init_q_table_entry);
             let current_q = *action_map.get(&action).unwrap_or(&0.0); // 0 default
             let target = (reward_f + (self.gamma * next_q_max));
             let new_q = current_q + (self.learning_rate * (target - current_q));
             // update q-table
             action_map.insert(action.clone(), new_q);
-            reward_f -= 10.0;
+            // reward_f -= 10.0;
         }
         
         self.episode_history.clear(); 
@@ -212,7 +214,7 @@ impl RL for QLearning {
 fn main() {
     
 
-    let mut agent_1 = QLearning::new(0.1, 0.9, vec![300, 150], Vec::<(NegotiationMessage, i32, i32)>::new());
+    let mut agent_1 = QLearning::new(0.05, 0.9, vec![300, 150], Vec::<(NegotiationMessage, i32, i32)>::new());
     let mut agent_2 = QLearning::new(0.1, 0.9, vec![150, 300], Vec::<(NegotiationMessage, i32, i32)>::new());
 
 
