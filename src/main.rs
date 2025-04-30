@@ -38,7 +38,8 @@ impl NegotiationMessage {
 
 pub trait RL {
     fn send(&mut self, exploration_rate: f32, n: NegotiationMessage) -> NegotiationMessage;
-    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage, is_accept: bool);
+    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage, is_accept: bool, num_rounds: i32);
+    fn get_results(&self) -> &[(NegotiationMessage, i32, i32)];
 }
 
 fn init_q_table_entry() -> HashMap<NegotiationMessage, f32> {
@@ -59,11 +60,14 @@ struct QLearning {
     gamma: f32,
     rng: ThreadRng,
     reward_table: Vec<i32>,
-    episode_history: Vec<((NegotiationMessage, u32), NegotiationMessage)>
+    episode_history: Vec<((NegotiationMessage, u32), NegotiationMessage)>,
+    results: Vec<(NegotiationMessage,i32, i32)> //Outcome, reward, numrounds.
+
 }
 
 impl QLearning {
-    fn new(learning_rate: f32, gamma: f32, reward_table: Vec<i32>) -> Self {
+    fn new(learning_rate: f32, gamma: f32, reward_table: Vec<i32>, results: Vec<(NegotiationMessage,i32,i32)>) -> Self {
+
 
         // Calc num states and actions
         let actions = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize + 1;
@@ -79,7 +83,8 @@ impl QLearning {
             gamma,
             rng: rand::rng(),
             reward_table,
-            episode_history: Vec::with_capacity(MAX_EXCHANGE_PAIRS as usize*2)
+            episode_history: Vec::with_capacity(MAX_EXCHANGE_PAIRS as usize*2),
+            results
         }
     }
 
@@ -150,7 +155,7 @@ impl RL for QLearning {
         return reply; // Return the chosen action
     }
 
-    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage, is_accept: bool) {
+    fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage, is_accept: bool, num_rounds:i32) {
         let mut reward: i32 = 0;
         match final_offer {
             NegotiationMessage::Empty =>  reward = -400, // max number of messages
@@ -159,10 +164,9 @@ impl RL for QLearning {
                 offer.iter().enumerate().for_each(|(i, val)| reward+= (*val) as i32*self.reward_table[i]);
             }
         }
-
         let reward_f = reward as f32;
-        println!("An agent was rewarded by {reward}");
-
+        //println!("An agent was rewarded by {reward}");
+        self.results.push((final_offer.clone(),reward,num_rounds));
         // update q-table
         let history_len = self.episode_history.len();
         for i in 0..history_len {
@@ -190,13 +194,17 @@ impl RL for QLearning {
         self.episode_history.clear(); 
         self.offer_count.clear();
     }
+    fn get_results(&self) -> &[(NegotiationMessage, i32, i32)] {
+        &self.results
+    }
 }
 
 fn main() {
     println!("Hello, world!");
 
-    let mut agent_1 = QLearning::new(0.1, 0.9, vec![300, 150]);
-    let mut agent_2 = QLearning::new(0.1, 0.9, vec![150, 300]);
+    let mut agent_1 = QLearning::new(0.1, 0.9, vec![300, 150], Vec::<(NegotiationMessage, i32, i32)>::new());
+    let mut agent_2 = QLearning::new(0.1, 0.9, vec![150, 300], Vec::<(NegotiationMessage, i32, i32)>::new());
+
 
     let explore_rates =[0.95, 0.8,0.5,0.3,0.1,0.0];
     //let n_episodes=[100,100,100,100,100];
@@ -209,7 +217,7 @@ fn main() {
 
 fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_rate: f32, ep_num: u32) {
 
-    println!("\nstarting episode {}", ep_num);
+    //println!("\nstarting episode {}", ep_num);
     
     
     let mut messages: Vec<NegotiationMessage> = Vec::new();
@@ -250,25 +258,53 @@ fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_
         }
     }
 
-    println!("outcome: {:?}", final_outcome);
-    println!("rounds: {}", num_rounds);
+    //println!("outcome: {:?}", final_outcome);
+    //println!("rounds: {}", num_rounds);
 
     if messages.len() % 2 == 0 { // agent 2 had las offer
-        agent_1.compute_reward_and_update_q(&final_outcome.invert(), true);
-        agent_2.compute_reward_and_update_q(&final_outcome, false);
+        agent_1.compute_reward_and_update_q(&final_outcome.invert(), true, num_rounds);
+        agent_2.compute_reward_and_update_q(&final_outcome, false, num_rounds);
     } else {
-        agent_1.compute_reward_and_update_q(&final_outcome, false);
-        agent_2.compute_reward_and_update_q(&final_outcome.invert(), true);
+        agent_1.compute_reward_and_update_q(&final_outcome, false, num_rounds);
+        agent_2.compute_reward_and_update_q(&final_outcome.invert(), true, num_rounds);
     }
     
+}
+
+fn print_agent_stats<T: RL>(agent: &T, ep_num: u32) {
+    let start_idx = ep_num-5000;
+    
+    let agent_results = &agent.get_results()[start_idx as usize..ep_num as usize];
+
+    let mut total_reward = 0;
+    let mut total_rounds = 0;
+    
+    for (_, reward, rounds) in agent_results {
+        total_reward += *reward;
+        total_rounds += *rounds;
+    }
+    
+    let avg_reward = total_reward as f64 / agent_results.len() as f64;
+    let avg_rounds = total_rounds as f64 / agent_results.len() as f64;
+    
+    println!("Episode {}:Avg Reward: {:.2}, Avg Rounds: {:.2}", 
+             ep_num, avg_reward, avg_rounds);
 }
 
 fn epoch_driver<T: RL>(mut agent_1: &mut T, mut agent_2: &mut T, exploration_rate: f32, n_episodes: u32) {
     let mut ep_num = 0;
 
     for _i in 0..n_episodes{
-        episode_driver(agent_1, agent_2,  exploration_rate,ep_num);
+        episode_driver(agent_1, agent_2, exploration_rate,ep_num);
         ep_num+=1;
+
+        if ep_num % 5000 == 0 {
+            println!("Agent 1: ");
+            print_agent_stats(agent_1, ep_num);
+            println!("Agent 2: ");
+            print_agent_stats(agent_2, ep_num);
+            println!("");
+        }
     }
 }
 
