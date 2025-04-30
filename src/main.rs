@@ -3,10 +3,10 @@ use rand::prelude::*;
 use rand::distr::OpenClosed01;
 
 const MAX_EXCHANGE_PAIRS: i32=20; // i.e. each agent makes MAX_EXCHANGE_PAIRS offers.
-const NUM_RESOURCE_TYPES: u32 = 4;
+const NUM_RESOURCE_TYPES: u32 = 2;
 const MAX_RESOURCES: u32 = 2;
 const MAX_RESOURCES_INC: u32 = MAX_RESOURCES + 1;
-const MAX_FAILURES: u32 = 5;
+const MAX_FAILURES: u32 = 3;
 
 const PRINTING: bool = false;
 
@@ -40,6 +40,7 @@ pub trait RL {
     fn send(&mut self, exploration_rate: f32, n: NegotiationMessage) -> NegotiationMessage;
     fn compute_reward_and_update_q(&mut self, final_offer: &NegotiationMessage, is_accept: bool, num_rounds: i32);
     fn get_results(&self) -> &[(NegotiationMessage, i32, i32)];
+    fn clear_results(&mut self);
 }
 
 fn init_q_table_entry() -> HashMap<NegotiationMessage, f32> {
@@ -197,10 +198,14 @@ impl RL for QLearning {
     fn get_results(&self) -> &[(NegotiationMessage, i32, i32)] {
         &self.results
     }
+    fn clear_results(&mut self){
+        self.results.clear();
+    }
+    
 }
 
 fn main() {
-    println!("Hello, world!");
+    
 
     let mut agent_1 = QLearning::new(0.1, 0.9, vec![300, 150], Vec::<(NegotiationMessage, i32, i32)>::new());
     let mut agent_2 = QLearning::new(0.1, 0.9, vec![150, 300], Vec::<(NegotiationMessage, i32, i32)>::new());
@@ -210,6 +215,7 @@ fn main() {
     //let n_episodes=[100,100,100,100,100];
     let n_episodes=[25000,25000,25000,25000,25000,3];
     for i in 0..explore_rates.len(){
+        println!("Epoch {}",i);
         epoch_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
     }
     
@@ -306,6 +312,8 @@ fn epoch_driver<T: RL>(mut agent_1: &mut T, mut agent_2: &mut T, exploration_rat
             println!("");
         }
     }
+    agent_1.clear_results();
+    agent_2.clear_results();
 }
 
 
