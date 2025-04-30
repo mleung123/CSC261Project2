@@ -110,7 +110,9 @@ impl QLearning {
 
         // Find the max action
         for (action, weight) in action_weights {
-            if weight > max_weight {
+            if self.offer_count.get(action).is_some_and(|x| *x > MAX_FAILURES) {
+                continue
+            } else if weight > max_weight {
                 max_action = action;
                 max_weight = weight;
                 max_actions = vec![ max_action ];
