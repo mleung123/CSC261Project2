@@ -18,10 +18,12 @@ pub enum NegotiationMessage{
 }
 
 impl NegotiationMessage {
-    fn create_random(rand: &mut ThreadRng) -> NegotiationMessage {
-        let accept = rand.random_range(0..NUM_RESOURCE_TYPES.pow(MAX_RESOURCES) + 1);
-        if accept == NUM_RESOURCE_TYPES.pow(MAX_RESOURCES) {
-            return NegotiationMessage::Accept;
+    fn create_random(rand: &mut ThreadRng, can_accept: bool) -> NegotiationMessage {
+        if can_accept {
+            let accept = rand.random_range(0..NUM_RESOURCE_TYPES.pow(MAX_RESOURCES) + 1);
+            if accept == NUM_RESOURCE_TYPES.pow(MAX_RESOURCES) {
+                return NegotiationMessage::Accept;
+            }
         }
         NegotiationMessage::Offer(vec![rand.random_range(0..MAX_RESOURCES+1), rand.random_range(0..MAX_RESOURCES+1)])
     }
@@ -102,6 +104,7 @@ impl QLearning {
     }
 
     fn get_max_offer_for_state(&mut self, state: (NegotiationMessage, u32)) -> (NegotiationMessage, f32) {
+        let can_accept = state.0 != NegotiationMessage::Empty;
         // Get or init
         let mut action_weights = self.q_table.entry(state).or_insert_with(init_q_table_entry).iter();
         // Use first variable as max
@@ -110,7 +113,7 @@ impl QLearning {
 
         // Find the max action
         for (action, weight) in action_weights {
-            if self.offer_count.get(action).is_some_and(|x| *x > MAX_FAILURES) {
+            if (action == &NegotiationMessage::Accept && !can_accept) || self.offer_count.get(action).is_some_and(|x| *x > MAX_FAILURES) {
                 continue
             } else if weight > max_weight {
                 max_action = action;
@@ -142,7 +145,7 @@ impl RL for QLearning {
         if exploration_rate<rng.sample::<f32, OpenClosed01>(OpenClosed01){
             
             rng.reseed();
-            let mut reply = NegotiationMessage::create_random(&mut rng);
+            let mut reply = NegotiationMessage::create_random(&mut rng, message != NegotiationMessage::Empty);
             self.increment_offer_count(&reply);
             // println!("returning reply");
             self.episode_history.push((current_state, reply.clone()));
