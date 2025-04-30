@@ -167,7 +167,7 @@ impl RL for QLearning {
                 offer.iter().enumerate().for_each(|(i, val)| reward+= (*val) as i32*self.reward_table[i]);
             }
         }
-        let reward_f = reward as f32;
+        let mut reward_f = reward as f32;
         //println!("An agent was rewarded by {reward}");
         self.results.push((final_offer.clone(),reward,num_rounds));
         // update q-table
@@ -191,7 +191,7 @@ impl RL for QLearning {
             let new_q = current_q + (self.learning_rate * (target - current_q));
             // update q-table
             action_map.insert(action.clone(), new_q);
-            reward -= 10;
+            reward_f -= 10.0;
         }
         
         self.episode_history.clear(); 
