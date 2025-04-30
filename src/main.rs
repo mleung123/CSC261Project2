@@ -287,9 +287,24 @@ fn print_agent_stats<T: RL>(agent: &T, ep_num: u32) {
     let mut total_reward = 0;
     let mut total_rounds = 0;
     
-    for (_, reward, rounds) in agent_results {
+    let mut common_outcomes =  HashMap::with_capacity(5000);
+    
+            
+    
+    for (outcome, reward, rounds) in agent_results {
         total_reward += *reward;
         total_rounds += *rounds;
+
+        if common_outcomes.contains_key(outcome){
+            let x = common_outcomes.get_mut(outcome);
+            if let Some(val) = x {
+                *val+=1
+            }
+        }
+        else{
+            common_outcomes.insert(outcome.clone(), 1);
+        }
+        
     }
     
     let avg_reward = total_reward as f64 / agent_results.len() as f64;
@@ -297,6 +312,15 @@ fn print_agent_stats<T: RL>(agent: &T, ep_num: u32) {
     
     println!("Episode {}:Avg Reward: {:.2}, Avg Rounds: {:.2}", 
              ep_num, avg_reward, avg_rounds);
+    println!("Most common outcomes:");
+    let n=5;
+    let mut entries: Vec<_> = common_outcomes.iter().collect();
+    
+    entries.sort_by(|a, b| b.1.cmp(a.1));
+    
+    for (i, (key, value)) in entries.iter().take(n).enumerate() {
+        println!("{}. {:?}: {:?}", i + 1, key, value);
+    }
 }
 
 fn epoch_driver<T: RL>(mut agent_1: &mut T, mut agent_2: &mut T, exploration_rate: f32, n_episodes: u32) {
