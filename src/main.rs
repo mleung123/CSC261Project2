@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use rand::prelude::*;
 use rand::distr::OpenClosed01;
+use std::fmt::{ self, Display };
 
 const MAX_EXCHANGE_PAIRS: i32=20; // i.e. each agent makes MAX_EXCHANGE_PAIRS offers.
 const NUM_RESOURCE_TYPES: u32 = 2;
-const MAX_RESOURCES: u32 = 2;
+const MAX_RESOURCES: u32 = 4;
 const MAX_RESOURCES_INC: u32 = MAX_RESOURCES + 1;
-const MAX_FAILURES: u32 = 3;
+const MAX_FAILURES: u32 = 5;
 
 const PRINTING: bool = false;
 
@@ -34,6 +35,16 @@ impl NegotiationMessage {
             return NegotiationMessage::Offer(response);
         } else {
             return self.clone()
+        }
+    }
+}
+
+impl Display for NegotiationMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        if let NegotiationMessage::Offer(vec) = self {
+            write!(f, "{}-{}", vec[0], vec[1])
+        } else {
+            write!(f, "{self:?}")
         }
     }
 }
@@ -76,7 +87,7 @@ impl QLearning {
         let actions = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize + 1;
         let states = (MAX_RESOURCES + 1).pow(NUM_RESOURCE_TYPES) as usize * MAX_FAILURES as usize;
         let capacity = (actions * states) as usize;
-        println!("Capacity: {capacity}, states: {states}, actions: {actions}");
+        // println!("Capacity: {capacity}, states: {states}, actions: {actions}");
         let q_table = HashMap::with_capacity(capacity);
 
         Self {
@@ -212,7 +223,7 @@ impl RL for QLearning {
 }
 
 fn main() {
-    
+    println!("Epoch,Episode,Most Common Outcome,Average Rewards,Average Rounds");
 
     let mut agent_1 = QLearning::new(0.05, 0.9, vec![300, 150], Vec::<(NegotiationMessage, i32, i32)>::new());
     let mut agent_2 = QLearning::new(0.1, 0.9, vec![150, 300], Vec::<(NegotiationMessage, i32, i32)>::new());
@@ -222,8 +233,8 @@ fn main() {
     //let n_episodes=[100,100,100,100,100];
     let n_episodes=[25000,25000,25000,25000,25000,3];
     for i in 0..explore_rates.len(){
-        println!("Epoch {}",i);
-        epoch_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i]);
+        // println!("Epoch {}",i);
+        epoch_driver(&mut agent_1, &mut agent_2,explore_rates[i],n_episodes[i], i);
     }
     
 }
@@ -284,7 +295,7 @@ fn episode_driver<T: RL>(mut  agent_1: &mut T, mut agent_2: &mut T, exploration_
     
 }
 
-fn print_agent_stats<T: RL>(agent: &T, ep_num: u32) {
+fn print_agent_stats<T: RL>(agent: &T, ep_num: u32, epoch: usize) {
     let start_idx = ep_num-5000;
     
     let agent_results = &agent.get_results()[start_idx as usize..ep_num as usize];
@@ -314,21 +325,23 @@ fn print_agent_stats<T: RL>(agent: &T, ep_num: u32) {
     
     let avg_reward = total_reward as f64 / agent_results.len() as f64;
     let avg_rounds = total_rounds as f64 / agent_results.len() as f64;
-    
-    println!("Episode {}:Avg Reward: {:.2}, Avg Rounds: {:.2}", 
-             ep_num, avg_reward, avg_rounds);
-    println!("Most common outcomes:");
-    let n=5;
-    let mut entries: Vec<_> = common_outcomes.iter().collect();
-    
-    entries.sort_by(|a, b| b.1.cmp(a.1));
-    
-    for (i, (key, value)) in entries.iter().take(n).enumerate() {
-        println!("{}. {:?}: {:?}", i + 1, key, value);
-    }
+    let (most_common_outcome, _) = common_outcomes.iter().max_by_key(|(_, v)| *v).unwrap();
+
+    println!("{epoch},{ep_num},{most_common_outcome},{avg_reward},{avg_rounds}");
+    // println!("Episode {}:Avg Reward: {:.2}, Avg Rounds: {:.2}", 
+    //          ep_num, avg_reward, avg_rounds);
+    // println!("Most common outcomes:");
+    // let n=5;
+    // let mut entries: Vec<_> = common_outcomes.iter().collect();
+    // 
+    // entries.sort_by(|a, b| b.1.cmp(a.1));
+    // 
+    // for (i, (key, value)) in entries.iter().take(n).enumerate() {
+    //     println!("{}. {:?}: {:?}", i + 1, key, value);
+    // }
 }
 
-fn epoch_driver<T: RL>(mut agent_1: &mut T, mut agent_2: &mut T, exploration_rate: f32, n_episodes: u32) {
+fn epoch_driver<T: RL>(mut agent_1: &mut T, mut agent_2: &mut T, exploration_rate: f32, n_episodes: u32, epoch: usize) {
     let mut ep_num = 0;
 
     for _i in 0..n_episodes{
@@ -336,11 +349,11 @@ fn epoch_driver<T: RL>(mut agent_1: &mut T, mut agent_2: &mut T, exploration_rat
         ep_num+=1;
 
         if ep_num % 5000 == 0 {
-            println!("Agent 1: ");
-            print_agent_stats(agent_1, ep_num);
-            println!("Agent 2: ");
-            print_agent_stats(agent_2, ep_num);
-            println!("");
+            // println!("Agent 1: ");
+            print_agent_stats(agent_1, ep_num, epoch);
+            // println!("Agent 2: ");
+            // print_agent_stats(agent_2, ep_num);
+            // println!("");
         }
     }
     agent_1.clear_results();
